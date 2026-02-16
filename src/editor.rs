@@ -56,6 +56,8 @@ impl Editor {
         match action {
             Action::MoveLeft => self.move_left(),
             Action::MoveRight => self.move_right(),
+            Action::MoveWordLeft => self.move_word_left(),
+            Action::MoveWordRight => self.move_word_right(),
             Action::MoveUp => self.move_up(),
             Action::MoveDown => self.move_down(),
             Action::Insert(ch) => {
@@ -150,6 +152,171 @@ impl Editor {
             self.cursor.row -= 1;
             self.cursor.col = self.buffer.line_len_chars(self.cursor.row);
         }
+    }
+
+    fn move_word_left(&mut self) {
+        if self.cursor.row == 0 && self.cursor.col == 0 {
+            return;
+        }
+
+        let mut row = self.cursor.row;
+        let mut byte_col;
+
+        if self.cursor.col == 0 {
+            row -= 1;
+            byte_col = self.buffer.line(row).map_or(0, str::len);
+        } else {
+            byte_col = self
+                .buffer
+                .line(row)
+                .map_or(0, |line| char_to_byte_index(line, self.cursor.col));
+        }
+
+        // Skip whitespace first.
+        loop {
+            if byte_col == 0 {
+                if row > 0 {
+                    row -= 1;
+                    byte_col = self.buffer.line(row).map_or(0, str::len);
+                    continue;
+                }
+
+                self.cursor.row = 0;
+                self.cursor.col = 0;
+                return;
+            }
+
+            let Some(line) = self.buffer.line(row) else {
+                self.cursor.row = 0;
+                self.cursor.col = 0;
+                return;
+            };
+
+            let Some(ch) = line[..byte_col].chars().next_back() else {
+                self.cursor.row = 0;
+                self.cursor.col = 0;
+                return;
+            };
+
+            if ch.is_whitespace() {
+                byte_col -= ch.len_utf8();
+                continue;
+            }
+
+            break;
+        }
+
+        // Then jump one token left:
+        // - identifier run: [A-Za-z0-9_]+
+        // - punctuation/symbol: single character (e.g. ';', '(', ')')
+        let Some(line) = self.buffer.line(row) else {
+            self.cursor.row = 0;
+            self.cursor.col = 0;
+            return;
+        };
+
+        let Some(ch) = line[..byte_col].chars().next_back() else {
+            self.cursor.row = row;
+            self.cursor.col = 0;
+            return;
+        };
+
+        if ch.is_alphanumeric() || ch == '_' {
+            while byte_col > 0 {
+                let Some(prev) = line[..byte_col].chars().next_back() else {
+                    break;
+                };
+                if prev.is_alphanumeric() || prev == '_' {
+                    byte_col -= prev.len_utf8();
+                } else {
+                    break;
+                }
+            }
+        } else {
+            byte_col -= ch.len_utf8();
+        }
+
+        self.cursor.row = row;
+        self.cursor.col = line[..byte_col].chars().count();
+    }
+
+    fn move_word_right(&mut self) {
+        let mut row = self.cursor.row;
+        let mut byte_col = self
+            .buffer
+            .line(row)
+            .map_or(0, |line| char_to_byte_index(line, self.cursor.col));
+
+        // If we are at end of line, move to the next line before token scanning.
+        if let Some(line) = self.buffer.line(row)
+            && byte_col >= line.len()
+            && row + 1 < self.buffer.line_count()
+        {
+            row += 1;
+            byte_col = 0;
+        }
+
+        // Skip whitespace first.
+        loop {
+            let Some(line) = self.buffer.line(row) else {
+                return;
+            };
+
+            if byte_col >= line.len() {
+                if row + 1 < self.buffer.line_count() {
+                    row += 1;
+                    byte_col = 0;
+                    continue;
+                }
+                self.cursor.row = row;
+                self.cursor.col = line.chars().count();
+                return;
+            }
+
+            let Some(ch) = line[byte_col..].chars().next() else {
+                self.cursor.row = row;
+                self.cursor.col = line.chars().count();
+                return;
+            };
+
+            if ch.is_whitespace() {
+                byte_col += ch.len_utf8();
+                continue;
+            }
+
+            break;
+        }
+
+        // Then jump one token right:
+        // - identifier run: [A-Za-z0-9_]+
+        // - punctuation/symbol: single character (e.g. ';', '(', ')')
+        let Some(line) = self.buffer.line(row) else {
+            return;
+        };
+
+        let Some(ch) = line[byte_col..].chars().next() else {
+            self.cursor.row = row;
+            self.cursor.col = line.chars().count();
+            return;
+        };
+
+        if ch.is_alphanumeric() || ch == '_' {
+            while byte_col < line.len() {
+                let Some(next) = line[byte_col..].chars().next() else {
+                    break;
+                };
+                if next.is_alphanumeric() || next == '_' {
+                    byte_col += next.len_utf8();
+                } else {
+                    break;
+                }
+            }
+        } else {
+            byte_col += ch.len_utf8();
+        }
+
+        self.cursor.row = row;
+        self.cursor.col = line[..byte_col].chars().count();
     }
 
     fn move_right(&mut self) {

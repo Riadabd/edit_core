@@ -33,6 +33,8 @@ impl Viewport {
 pub enum Action {
     MoveLeft,
     MoveRight,
+    MoveWordLeft,
+    MoveWordRight,
     MoveUp,
     MoveDown,
     Insert(char),

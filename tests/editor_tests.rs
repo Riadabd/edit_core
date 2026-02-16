@@ -141,3 +141,84 @@ fn dirty_flag_only_tracks_mutations() {
     // Assert
     assert!(!editor.is_dirty());
 }
+
+#[test]
+fn move_word_left_treats_punctuation_as_token() {
+    // Init
+    let buffer = Buffer::from_text("foo(); bar");
+    let mut editor = Editor::new(buffer, Viewport::new(1, 20));
+
+    // Move to end of line.
+    for _ in 0..10 {
+        editor.apply(Action::MoveRight);
+    }
+    assert_eq!(editor.cursor(), Cursor::new(0, 10));
+
+    // Act + Assert
+    editor.apply(Action::MoveWordLeft);
+    assert_eq!(editor.cursor(), Cursor::new(0, 7)); // before "bar"
+
+    editor.apply(Action::MoveWordLeft);
+    assert_eq!(editor.cursor(), Cursor::new(0, 5)); // before ';'
+
+    editor.apply(Action::MoveWordLeft);
+    assert_eq!(editor.cursor(), Cursor::new(0, 4)); // before ')'
+
+    editor.apply(Action::MoveWordLeft);
+    assert_eq!(editor.cursor(), Cursor::new(0, 3)); // before '('
+
+    editor.apply(Action::MoveWordLeft);
+    assert_eq!(editor.cursor(), Cursor::new(0, 0)); // before "foo"
+}
+
+#[test]
+fn move_word_right_treats_punctuation_as_token() {
+    // Init
+    let buffer = Buffer::from_text("foo(); bar");
+    let mut editor = Editor::new(buffer, Viewport::new(1, 20));
+
+    // Act + Assert
+    editor.apply(Action::MoveWordRight);
+    assert_eq!(editor.cursor(), Cursor::new(0, 3)); // after "foo"
+
+    editor.apply(Action::MoveWordRight);
+    assert_eq!(editor.cursor(), Cursor::new(0, 4)); // after '('
+
+    editor.apply(Action::MoveWordRight);
+    assert_eq!(editor.cursor(), Cursor::new(0, 5)); // after ')'
+
+    editor.apply(Action::MoveWordRight);
+    assert_eq!(editor.cursor(), Cursor::new(0, 6)); // after ';'
+
+    editor.apply(Action::MoveWordRight);
+    assert_eq!(editor.cursor(), Cursor::new(0, 10)); // after "bar"
+}
+
+#[test]
+fn move_word_crosses_lines_consistently() {
+    // Init
+    let buffer = Buffer::from_text("foo\n   ;bar");
+    let mut editor = Editor::new(buffer, Viewport::new(2, 20));
+
+    // Move to start of second line.
+    for _ in 0..4 {
+        editor.apply(Action::MoveRight);
+    }
+    assert_eq!(editor.cursor(), Cursor::new(1, 0));
+
+    // Left jump from start of line should cross to previous line's word start.
+    editor.apply(Action::MoveWordLeft);
+    assert_eq!(editor.cursor(), Cursor::new(0, 0));
+
+    // Move to end of first line and jump right across newline+spaces onto punctuation.
+    for _ in 0..3 {
+        editor.apply(Action::MoveRight);
+    }
+    assert_eq!(editor.cursor(), Cursor::new(0, 3));
+
+    editor.apply(Action::MoveWordRight);
+    assert_eq!(editor.cursor(), Cursor::new(1, 4)); // after ';'
+
+    editor.apply(Action::MoveWordRight);
+    assert_eq!(editor.cursor(), Cursor::new(1, 7)); // after "bar"
+}
