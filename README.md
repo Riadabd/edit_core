@@ -6,6 +6,7 @@ A small, dependency-free text editing core for building a terminal or GUI editor
 
 - Line-oriented buffer with UTF-8 safe, character-based indexing.
 - Cursor movement across lines with automatic clamping.
+- UTF-8-aware word movement (`MoveWordLeft`, `MoveWordRight`) with consistent token jumps.
 - Insert, delete, and newline actions.
 - Viewport scrolling with visible line slicing.
 - Dirty flag tracking for mutations only.
@@ -32,7 +33,7 @@ assert_eq!(editor.buffer().as_text(), "h!ello\nworld");
 - `Buffer`: Stores the text as a vector of lines.
 - `Cursor`: Row and column position (character-based).
 - `Viewport`: Visible window with row/column offsets and size.
-- `Action`: Editing actions (movement, insertion, deletion, newline).
+- `Action`: Editing actions (character movement, word movement, insertion, deletion, newline).
 - `Editor`: Applies actions to a buffer while managing cursor, viewport, and dirty state.
 
 ### `Buffer`
@@ -55,10 +56,16 @@ assert_eq!(editor.buffer().as_text(), "h!ello\nworld");
 
 ### `Action`
 
-- `MoveLeft`, `MoveRight`, `MoveUp`, `MoveDown`
+- `MoveLeft`, `MoveRight`, `MoveWordLeft`, `MoveWordRight`, `MoveUp`, `MoveDown`
 - `Insert(char)`
 - `DeleteBackward`, `DeleteForward`
 - `Newline`
+
+Word movement behavior:
+- Skip leading whitespace first.
+- Jump an identifier run `[A-Za-z0-9_]+` as one token.
+- Treat punctuation/symbol characters as single-token jumps.
+- Cross line boundaries when needed.
 
 ### `Editor`
 
@@ -77,3 +84,11 @@ assert_eq!(editor.buffer().as_text(), "h!ello\nworld");
 
 - Rows and columns are character indices, not byte offsets.
 - `visible_lines` returns slices based on the current viewport offsets and size.
+
+## Internal Layout
+
+- `src/lib.rs`: Crate wiring and re-exports.
+- `src/types.rs`: Public types (`Action`, `Cursor`, `Viewport`).
+- `src/buffer.rs`: Line-based text storage.
+- `src/editor.rs`: Editing engine and cursor/viewport behavior.
+- `src/text.rs`: UTF-8 helper routines for character-safe slicing/indexing.
